@@ -58,7 +58,7 @@ My first hand-built prototype.
 
 This is basically a break-out board, with a 12V to 5V converter for convenience so that I don't have to use an extension cord with a USB power supply to power the Pi Zero.  I used the [sparkfun RS485 shield](https://www.sparkfun.com/products/retired/13706) I had laying around from my [last reverse engineering project](https://github.com/jeremyrode/elancontrol).
 
-![alt text](docs/first_prototype_in_use.jpg "First Prototype In Use")
+![alt text](docs/first_prototype_inuse.jpg "First Prototype In Use")
 
 This prototype successfully captured screen codes, and could play the codes back, but as its RS-422 transmitter is in parallel with the screens transmitter code playback never worked.  I suspect that because of the polled nature of the system transmitting status every 40ms, that when a button press code is injected some sort of button debouncing algorithm rejects the single button press code.  At this point I bit the bullet and I designed a raspberry Pi Zero "hat" PCB (see the PCB directory) that uses a MAX14778 MUX to inject commands (using a MAX3089 to translate the Pi's serial port to the spa's RS-422), defaulting to a passthrough mode where the normal screen traffic is unaffected, selected via GPIO5.  I also threw in a 12V to 5V regulator to power the raspberry Pi from the 12V screen supply.  (Watch out the Vacanza controller will power cycle this 12V if valid commands are not returned for a couple of seconds or so!  That threw my debugging through a loop!)
 

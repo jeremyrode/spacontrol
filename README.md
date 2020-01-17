@@ -18,8 +18,6 @@ Here at 12:08 AM the temp is turned down to ensure a start from 80 deg, as this 
 ## Detailed Status
 I have successfully reverse engineered the button press protocol.  Playing the protocol back proved to be tricky, as the keypad seems to be polled, so even when no buttons are pressed, the keypad reports status every ~40ms.  Injecting commands on top of the polled screen traffic does not result in the controller registering a button press. I suspect there is a switch "debouncing" algorithm that only registers a press if button polls several times in a row.  This necessitated a more complicated hardware design, where a GPIO on the raspberry pi is used to switch a mux, muting the traffic from the screen while virtual button presses are generated.
 
-I designed a raspberry Pi Zero "hat" PCB (see the PCB directory) that uses a MAX14778 MUX to inject commands (using a MAX3089 to translate the Pi's serial port to the spa's RS-422), defaulting to a passthrough mode where the normal screen traffic is unaffected, selected via GPIO5.  I also threw in a 12V to 5V regulator to power the raspberry Pi from the 12V screen supply.  (Watch out the Vacanza controller will power cycle this 12V if valid commands are not returned for a couple of seconds or so!  That threw my debugging through a loop!)
-
 More details on the reverse engineering methods used, check back.
 
 ## Commands
@@ -52,10 +50,20 @@ Probing with an oscilloscope revealed the following pinout:
 | 5 | Controller->Screen (RS-422) |
 | 6 | Screen->Controller (RS-422) |
 
-I have purposely not marked the RS-422 polarity, as I want to double check.  The PCB has jumpers that toggle the MAX3089's polarity inputs, so the PCB as designed will work with either polarity. 
+I have purposely not marked the RS-422 polarity, as I want to double check.  The PCB has jumpers that toggle the MAX3089's polarity inputs, so the PCB as designed will work with either polarity.
+
+My first hand-built prototype.  
 
 ![alt text](docs/first_prototype.jpg "First Prototype")
 
+This is basically a break-out board, with a 12V to 5V converter for convenience so that I don't have to use an extension cord with a USB power supply to power the Pi Zero.  I used the [sparkfun RS485 shield](https://www.sparkfun.com/products/retired/13706) I had laying around from my [last reverse engineering project](https://github.com/jeremyrode/elancontrol).
+
+![alt text](docs/first_prototype_in_use.jpg "First Prototype In Use")
+
+This prototype successfully captured screen codes, and could play the codes back, but as its RS-422 transmitter is in parallel with the screens transmitter code playback never worked.  I suspect that because of the polled nature of the system transmitting status every 40ms, that when a button press code is injected some sort of button debouncing algorithm rejects the single button press code.  At this point I bit the bullet and I designed a raspberry Pi Zero "hat" PCB (see the PCB directory) that uses a MAX14778 MUX to inject commands (using a MAX3089 to translate the Pi's serial port to the spa's RS-422), defaulting to a passthrough mode where the normal screen traffic is unaffected, selected via GPIO5.  I also threw in a 12V to 5V regulator to power the raspberry Pi from the 12V screen supply.  (Watch out the Vacanza controller will power cycle this 12V if valid commands are not returned for a couple of seconds or so!  That threw my debugging through a loop!)
+
 ![alt text](docs/schematic.png "Interface PCB Schematic")
+
+Trusty Macrofab (I highly recommend!) fabricated it no problem:
 
 ![alt text](docs/pcb.png "PCB")

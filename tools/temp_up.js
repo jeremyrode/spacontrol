@@ -1,5 +1,4 @@
 #!/usr/bin/node
-console.log('Begin');
 const SerialPort = require('serialport');
 const Delimiter = require('@serialport/parser-delimiter');
 
@@ -10,8 +9,8 @@ const long_pattern =  Buffer.alloc(10,'584D5300036b00000166','hex'); //No button
 const temp_up =       Buffer.alloc(10,'584D5300036b00020168', 'hex');
 
 const delay = 40; //delay in ms between commands
-const numcommand = 21; //How many total commands to send (first one is lost)
-const repcommand = 20; //How many repeats for each command
+const numcommand = 24; //How many total commands to send (first one is lost) 21 = 100 deg from 80 min
+const repcommand = 5; //How many repeats for each command 10 is too many, registers mutiple sometimes
 var i;
 var x;
 
@@ -47,5 +46,5 @@ for (i = 1; i < numcommand*repcommand*2; i+=repcommand*2) {
 }
 setTimeout(mux_off,i*delay); //Give back control of the bus
 
-console.log('Done!');
+
 //script will exit afer the pending timeouts

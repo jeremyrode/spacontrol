@@ -9,7 +9,7 @@ const long_pattern =  Buffer.alloc(10,'584D5300036b00000166','hex'); //No button
 const temp_up =       Buffer.alloc(10,'584D5300036b00020168', 'hex');
 
 const delay = 40; //delay in ms between commands
-const numcommand = 24; //How many total commands to send (first one is lost) 21 = 100 deg from 80 min
+const numcommand = 30; //How many total commands to send (first one is lost) 21 = 100 deg from 80 min
 const repcommand = 5; //How many repeats for each command 10 is too many, registers mutiple sometimes
 var i;
 var x;

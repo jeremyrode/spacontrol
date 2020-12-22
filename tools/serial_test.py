@@ -3,19 +3,23 @@ import datetime
 import serial
 
 ser = serial.Serial(
-    port='/dev/ttyUSB0',
+    port='/dev/ttyAMA0',
     baudrate = 115200,
-    parity=serial.PARITY_NONE,
-    stopbits=serial.STOPBITS_TWO,#35B (minus 6 bits) with two stop bits 
-    bytesize=serial.EIGHTBITS,  # 38 bytes with one stop bit
-   # timeout=1
+    timeout=0.05  #Attempting to time gate the pattern
+#   parity=serial.PARITY_NONE,
+#   stopbits=serial.STOPBITS_TWO,#35B (minus 6 bits) with two stop bits
+#   bytesize=serial.EIGHTBITS,  # 38 bytes with one stop bit
+
     )
-old=ser.read(8)
-old_bin_string = old.hex()
-print(old_bin_string)
+
+len = 128
+
 while True:
-    data=ser.read(8)
-    if (data != old):
+    data=ser.read(len)
+    if (data): #Don't print empty lines
         bin_string = data.hex()
         print(bin_string)
         old = data
+
+
+#if (data != old):

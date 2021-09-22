@@ -82,7 +82,7 @@ function listCals(auth) {
       }
     }
     else {
-      console.log('No upcoming events found.');
+      console.log('No calendars found.');
     }
   });
 }

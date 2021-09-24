@@ -19,14 +19,15 @@ const TOKEN_PATH = '/home/pi/token.json';
 const SECRET_PATH = '/home/pi/client_secret.json';
 const LOG_FILE = '/home/pi/SpaCalendarLog.txt';
 const GOOGLE_CAL_ID = '86tvif05v2c7t148ctpojefc8k@group.calendar.google.com';
-const UPDATE_INTERVAL = 5; //In mins
-const INTERVAL_OVERLAP = 2; //In mins, need at least a min
-const IDLE_TEMP = 80;
+const UPDATE_INTERVAL = 20; //How often to poll Goolge canlendar In mins
+const INTERVAL_OVERLAP = 1; //In mins to be sure we don't miss anything
+const IDLE_TEMP = 80; //What temp when no event is scheduled
 const long_pattern =  Buffer.alloc(10,'584D5300036b00000166','hex'); //No button pressed pattern
-const temp_up =       Buffer.alloc(10,'584D5300036b00020168', 'hex');
-const temp_down =     Buffer.alloc(10,'584D5300036b0008016e', 'hex');
-const virtualPressDelay = 40; //delay in ms between vitual buttom presses
-const repCommand = 5; //How many repeats for each press 10 is too many, registers mutiple sometimes
+const temp_up =       Buffer.alloc(10,'584D5300036b00020168', 'hex'); //Temp up presses pattern
+const temp_down =     Buffer.alloc(10,'584D5300036b0008016e', 'hex'); //Temp down presssed pattern
+const virtualPressDelay = 40; //delay in ms between vitual button presses
+const repCommand = 5; //How many pattern repeats for each virtual press 10 is too many, registers mutiple sometimes
+const limCommand = 26; //How many virtual presses to hit a limit
 const upDownDelay = 60000; //How long to wait between the two temp changes
 
 var oAuth2Client; //The Auth for calendars
@@ -41,7 +42,7 @@ function combinedLog(message) {
   console.log(message);
   logfile.write(message + '\n')
 }
-//Make sure at startup we don't control bus
+//Make sure at startup we don't control the serial bus
 mux_off(); //UNCOMMENT FOR REAL OPERATION
 // Load client secrets from a local file.
 fs.readFile(SECRET_PATH, (err, content) => {
@@ -75,17 +76,17 @@ function authorize(credentials, callback) {
   });
 }
 
-
 function listEvents(auth) {
   const calendar = google.calendar({version: 'v3', auth});
   const curHour = new Date; //Plan out the current hour
+  curHour.setSeconds(curHour.getSeconds() + INTERVAL_OVERLAP*10); //Give us delay for causality
   const nextHour = new Date(curHour.getTime()); //Clone current time
   nextHour.setMinutes(curHour.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
   //combinedLog('We are planning');
   //combinedLog('From: ' + curHour.toString());
   //combinedLog('To: ' +  nextHour.toString());
   mux_off(); //On the small chance we interrupt a command
-  while (curPlanCommands.length) { //flush the current plan
+  while (curPlanCommands.length) { //flush the current plan in
     clearTimeout(curPlanCommands.pop());
   }
   calendar.events.list({
@@ -124,11 +125,16 @@ function listEvents(auth) {
   });
 }
 
-function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need to know t
+function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need to know what current temp setting is
   let msecsInFuture  = Math.abs(atTime - Date.now());
-  tempCommand(25,false,msecsInFuture); //Ensure we are at 80 by going down a bunch
-  if (temp > 80) {
-    tempCommand(temp-79,true,msecsInFuture + upDownDelay) //Go up from 80 after delay, first press is lost
+  if (temp >= 104) { //This is the limit, so just go there with extra presse
+    tempCommand(limCommand,true,msecsInFuture); //Ensure we are at 104 by going up a bunch
+  }
+  else {
+    tempCommand(limCommand,false,msecsInFuture); //Ensure we are at 80 by going down a bunch
+    if (temp > 80) { //If above 80, go there after a delay
+      tempCommand(temp-79,true,msecsInFuture + upDownDelay) //Go up from 80 after delay, first press is lost
+    }
   }
 }
 
@@ -155,25 +161,25 @@ function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual
 
 function mux_on() {
   //combinedLog('MUX ON');
-	//MUXPin.writeSync(1);
+	//MUXPin.writeSync(1); //UNCOMMENT FOR REAL OPERATION
 }
 
 function mux_off() {
   //combinedLog('MUX OFF');
-	//MUXPin.writeSync(0);
+	//MUXPin.writeSync(0); //UNCOMMENT FOR REAL OPERATION
 }
 
 function sendDown() {
   //combinedLog('SEND TEMP DOWN');
-	//port.write(temp_down);
+	//port.write(temp_down); //UNCOMMENT FOR REAL OPERATION
 }
 
 function sendUp() {
   //combinedLog('SEND TEMP UP');
-	//port.write(temp_up);
+	//port.write(temp_up); //UNCOMMENT FOR REAL OPERATION
 }
 
 function sendIdle() {
   //combinedLog('SEND IDLE PAT');
-	//port.write(long_pattern);
+	//port.write(long_pattern); //UNCOMMENT FOR REAL OPERATION
 }

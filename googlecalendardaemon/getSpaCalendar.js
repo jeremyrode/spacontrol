@@ -19,16 +19,16 @@ const TOKEN_PATH = '/home/pi/token.json';
 const SECRET_PATH = '/home/pi/client_secret.json';
 const LOG_FILE = '/home/pi/SpaCalendarLog.txt';
 const GOOGLE_CAL_ID = '86tvif05v2c7t148ctpojefc8k@group.calendar.google.com';
-const UPDATE_INTERVAL = 20; //How often to poll Goolge canlendar In mins
+const UPDATE_INTERVAL = 5; //How often to poll Goolge canlendar In mins
 const INTERVAL_OVERLAP = 1; //In mins to be sure we don't miss anything
 const IDLE_TEMP = 80; //What temp when no event is scheduled
-const long_pattern =  Buffer.alloc(10,'584D5300036b00000166','hex'); //No button pressed pattern
-const temp_up =       Buffer.alloc(10,'584D5300036b00020168', 'hex'); //Temp up presses pattern
-const temp_down =     Buffer.alloc(10,'584D5300036b0008016e', 'hex'); //Temp down presssed pattern
-const virtualPressDelay = 40; //delay in ms between vitual button presses
-const repCommand = 5; //How many pattern repeats for each virtual press 10 is too many, registers mutiple sometimes
-const limCommand = 26; //How many virtual presses to hit a limit
-const upDownDelay = 60000; //How long to wait between the two temp changes
+const LONG_PATTERN =  Buffer.alloc(10,'584D5300036b00000166','hex'); //No button pressed pattern
+const TEMP_UP =       Buffer.alloc(10,'584D5300036b00020168', 'hex'); //Temp up presses pattern
+const TEMP_DOWN =     Buffer.alloc(10,'584D5300036b0008016e', 'hex'); //Temp down presssed pattern
+const VIRTUAL_PRESS_DELAY = 40; //delay in ms between vitual button presses
+const VIR_PRESS_PAT_REPEAT = 5; //How many pattern repeats for each virtual press 10 is too many, registers mutiple sometimes
+const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
+const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
 var oAuth2Client; //The Auth for calendars
 var curPlanCommands = new Array(); //List of Intervals for the curent interval
@@ -79,7 +79,7 @@ function authorize(credentials, callback) {
 function listEvents(auth) {
   const calendar = google.calendar({version: 'v3', auth});
   const curHour = new Date; //Plan out the current hour
-  curHour.setSeconds(curHour.getSeconds() + INTERVAL_OVERLAP*10); //Give us delay for causality
+  curHour.setSeconds(curHour.getSeconds() + 10); //Give us a ten sec delay for causality
   const nextHour = new Date(curHour.getTime()); //Clone current time
   nextHour.setMinutes(curHour.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
   //combinedLog('We are planning');
@@ -101,20 +101,20 @@ function listEvents(auth) {
       combinedLog('The API returned an error: ' + err);
     }
     const events = res.data.items;
-    combinedLog('Got ' + events.length + ' events!' );
+    //combinedLog('Got ' + events.length + ' events!' );
     for (let event of events) {
       const eventStart = new Date(event.start.dateTime);
       const eventEnd = new Date(event.end.dateTime);
       var summary = event.summary.split(":"); //Look for desired temp
       var desired_temp = parseInt(summary[1],10);
       if (summary.length == 2 && summary[0].trim() == 'Temp' && Number.isInteger(desired_temp) && desired_temp > 79 && desired_temp < 105) { //Validate Summary
-         combinedLog('Got Valid Temp of: ' + desired_temp);
+         //combinedLog('Got Valid Temp of: ' + desired_temp);
          if ( eventStart >= curHour ) { //If the event starts after interval start, need a temp up event
-           combinedLog('Temp Up Event Found at start: ' + eventStart.toString());
+           //combinedLog('Temp Up to ' + desired_temp + ' Event Found at start: ' + eventStart.toString());
            scheduleTemp(desired_temp, eventStart); //Schedule the temp change
          }
          if ( eventEnd <= nextHour ) { //If the event ends before the interval end, need a temp down event
-           combinedLog('Temp Down Event Found at end: ' + eventEnd.toString());
+           //combinedLog('Temp Down Event Found at end: ' + eventEnd.toString());
            scheduleTemp(IDLE_TEMP, eventEnd); //Schedule the temp change
          }
       }
@@ -128,12 +128,15 @@ function listEvents(auth) {
 function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need to know what current temp setting is
   let msecsInFuture  = Math.abs(atTime - Date.now());
   if (temp >= 104) { //This is the limit, so just go there with extra presse
-    tempCommand(limCommand,true,msecsInFuture); //Ensure we are at 104 by going up a bunch
+    //combinedLog('Scheduling an up to 104 in ' + (msecsInFuture/60000).toFixed(1)  + ' minutes');
+    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,true,msecsInFuture); //Ensure we are at 104 by going up a bunch
   }
   else {
-    tempCommand(limCommand,false,msecsInFuture); //Ensure we are at 80 by going down a bunch
+    //combinedLog('Scheduling a go down to 80 in ' + (msecsInFuture/60000).toFixed(1)  + ' minutes');
+    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture); //Ensure we are at 80 by going down a bunch
     if (temp > 80) { //If above 80, go there after a delay
-      tempCommand(temp-79,true,msecsInFuture + upDownDelay) //Go up from 80 after delay, first press is lost
+      //combinedLog('Scheduling ' + (temp-79).toFixed(1) + ' virtual presses in ' + ((msecsInFuture + DELAY_DOWN_TO_UP)/60000).toFixed(1)  + ' minutes');
+      tempCommand(temp-79,true,msecsInFuture + DELAY_DOWN_TO_UP); //Go up from 80 after delay, first press is lost
     }
   }
 }
@@ -142,21 +145,22 @@ function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual
   let i = 1;
   let x = 0;
   curPlanCommands.push(setTimeout(mux_on,commandDelay)); // Take control of the serial bus
-  //Cue up a bunch of virtual button presses!
-  for (i = 1; i < numPress*repCommand*2; i+=repCommand*2) {
-    for (x = 0; x < repCommand; x++) {
+  //Cue up a bunch of virtual button presses between idle commands
+  for (i = 1; i < numPress*VIR_PRESS_PAT_REPEAT*2; i+=VIR_PRESS_PAT_REPEAT*2) {
+    for (x = 0; x < VIR_PRESS_PAT_REPEAT; x++) {
       if (isUp) {
-        curPlanCommands.push(setTimeout(sendUp,(i+x)*virtualPressDelay+commandDelay));
+        curPlanCommands.push(setTimeout(sendUp,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
       }
       else {
-        curPlanCommands.push(setTimeout(sendDown,(i+x)*virtualPressDelay+commandDelay));
+        curPlanCommands.push(setTimeout(sendDown,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
       }
     }
-    for (x = repCommand; x < repCommand*2; x++) {
-      curPlanCommands.push(setTimeout(sendIdle,(i+x)*virtualPressDelay+commandDelay));
+    for (x = VIR_PRESS_PAT_REPEAT; x < VIR_PRESS_PAT_REPEAT*2; x++) {
+      curPlanCommands.push(setTimeout(sendIdle,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
     }
   }
-  curPlanCommands.push(setTimeout(mux_off,i*virtualPressDelay+commandDelay)); //Give back control of the bus
+  curPlanCommands.push(setTimeout(mux_off,i*VIRTUAL_PRESS_DELAY+commandDelay)); //Give back control of the bus
+  setTimeout(combinedLog,i*VIRTUAL_PRESS_DELAY+commandDelay,'Finished Exec ' + numPress + ' presses ' + isUp);
 }
 
 function mux_on() {
@@ -171,15 +175,15 @@ function mux_off() {
 
 function sendDown() {
   //combinedLog('SEND TEMP DOWN');
-	//port.write(temp_down); //UNCOMMENT FOR REAL OPERATION
+	//port.write(TEMP_DOWN); //UNCOMMENT FOR REAL OPERATION
 }
 
 function sendUp() {
   //combinedLog('SEND TEMP UP');
-	//port.write(temp_up); //UNCOMMENT FOR REAL OPERATION
+	//port.write(TEMP_UP); //UNCOMMENT FOR REAL OPERATION
 }
 
 function sendIdle() {
   //combinedLog('SEND IDLE PAT');
-	//port.write(long_pattern); //UNCOMMENT FOR REAL OPERATION
+	//port.write(LONG_PATTERN); //UNCOMMENT FOR REAL OPERATION
 }

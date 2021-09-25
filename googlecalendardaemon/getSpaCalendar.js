@@ -3,10 +3,10 @@
 const fs = require('fs');
 const readline = require('readline');
 const {google} = require('googleapis');
-//const SerialPort = require('serialport'); //UNCOMMENT FOR REAL OPERATION
-//const Delimiter = require('@serialport/parser-delimiter'); //UNCOMMENT FOR REAL OPERATION
-//const Gpio = require('onoff').Gpio; //require onoff to control GPIO UNCOMMENT FOR REAL OPERATION
-//const MUXPin = new Gpio(5, 'out'); //declare GPIO5, the muxpin as an output UNCOMMENT FOR REAL OPERATION
+const SerialPort = require('serialport');
+const Delimiter = require('@serialport/parser-delimiter');
+const Gpio = require('onoff').Gpio; //require onoff to control GPIO
+const MUXPin = new Gpio(5, 'out'); //declare GPIO5, the muxpin as an output
 
 process.title = 'GoogleCalendarDaemon';
 
@@ -43,7 +43,7 @@ function combinedLog(message) {
   logfile.write(message + '\n')
 }
 //Make sure at startup we don't control the serial bus
-mux_off(); //UNCOMMENT FOR REAL OPERATION
+mux_off();
 // Load client secrets from a local file.
 fs.readFile(SECRET_PATH, (err, content) => {
   if (err) {
@@ -55,9 +55,9 @@ fs.readFile(SECRET_PATH, (err, content) => {
   setInterval(() => {listEvents(oAuth2Client)}, UPDATE_INTERVAL*60000); //Reupdate, do we need to reauth?
 });
 
-//const port = new SerialPort('/dev/serial0', { //UNCOMMENT FOR REAL OPERATION
-//  baudRate: 115200 //UNCOMMENT FOR REAL OPERATION
-//}) //UNCOMMENT FOR REAL OPERATION
+const port = new SerialPort('/dev/serial0', {
+  baudRate: 115200
+})
 /**
  * Create an OAuth2 client with the given credentials, and then execute the
  * given callback function.
@@ -167,25 +167,25 @@ function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual
 
 function mux_on() {
   //combinedLog('MUX ON');
-	//MUXPin.writeSync(1); //UNCOMMENT FOR REAL OPERATION
+	MUXPin.writeSync(1);
 }
 
 function mux_off() {
   //combinedLog('MUX OFF');
-	//MUXPin.writeSync(0); //UNCOMMENT FOR REAL OPERATION
+	MUXPin.writeSync(0);
 }
 
 function sendDown() {
   //combinedLog('SEND TEMP DOWN');
-	//port.write(TEMP_DOWN); //UNCOMMENT FOR REAL OPERATION
+	port.write(TEMP_DOWN);
 }
 
 function sendUp() {
   //combinedLog('SEND TEMP UP');
-	//port.write(TEMP_UP); //UNCOMMENT FOR REAL OPERATION
+	port.write(TEMP_UP);
 }
 
 function sendIdle() {
   //combinedLog('SEND IDLE PAT');
-	//port.write(LONG_PATTERN); //UNCOMMENT FOR REAL OPERATION
+	port.write(LONG_PATTERN);
 }

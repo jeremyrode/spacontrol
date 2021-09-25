@@ -31,7 +31,7 @@ const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
 var oAuth2Client; //The Auth for calendars
-var curPlanCommands = new Array(); //List of Intervals for the curent interval
+var curPlanCommands = new Array(); //List of Intervals for the curent plan
 
 // Log file for testing purposes
 var logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
@@ -107,7 +107,8 @@ function listEvents(auth) {
       const eventEnd = new Date(event.end.dateTime);
       var summary = event.summary.split(":"); //Look for desired temp
       var desired_temp = parseInt(summary[1],10);
-      if (summary.length == 2 && summary[0].trim() == 'Temp' && Number.isInteger(desired_temp) && desired_temp > 79 && desired_temp < 105) { //Validate Summary
+      if (summary.length == 2 && summary[0].trim() == 'Temp' &&
+      Number.isInteger(desired_temp) && desired_temp > 79 && desired_temp < 105) { //Validate Summary
          //combinedLog('Got Valid Temp of: ' + desired_temp);
          if ( eventStart >= curHour ) { //If the event starts after interval start, need a temp up event
            //combinedLog('Temp Up to ' + desired_temp + ' Event Found at start: ' + eventStart.toString());
@@ -142,8 +143,8 @@ function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need 
 }
 
 function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual button presses
-  let i = 1;
-  let x = 0;
+  let i = 1; // Push all the timeout events, so we can ensure they're cancelled
+  let x = 0; // when we plan the next interval
   curPlanCommands.push(setTimeout(mux_on,commandDelay)); // Take control of the serial bus
   //Cue up a bunch of virtual button presses between idle commands
   for (i = 1; i < numPress*VIR_PRESS_PAT_REPEAT*2; i+=VIR_PRESS_PAT_REPEAT*2) {
@@ -160,7 +161,8 @@ function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual
     }
   }
   curPlanCommands.push(setTimeout(mux_off,i*VIRTUAL_PRESS_DELAY+commandDelay)); //Give back control of the bus
-  setTimeout(combinedLog,i*VIRTUAL_PRESS_DELAY+commandDelay,'Finished Exec ' + numPress + ' presses ' + isUp);
+  curPlanCommands.push(setTimeout(combinedLog,i*VIRTUAL_PRESS_DELAY+commandDelay,
+    'Finished Exec ' + numPress + ' presses ' + isUp)); // Log an event for testing
 }
 
 function mux_on() {

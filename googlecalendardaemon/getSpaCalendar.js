@@ -30,11 +30,15 @@ const VIR_PRESS_PAT_REPEAT = 5; //How many pattern repeats for each virtual pres
 const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
-var oAuth2Client; //The Auth for calendars
 var curPlanCommands = new Array(); //List of Intervals for the curent plan
 
 // Log file for testing purposes
 var logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
+
+//Make sure at startup we don't control the serial bus
+mux_off();
+
+// logging function
 function combinedLog(message) {
   let curDate = new Date();
   let dateStr = curDate.toString();
@@ -42,41 +46,48 @@ function combinedLog(message) {
   console.log(message);
   logfile.write(message + '\n')
 }
-//Make sure at startup we don't control the serial bus
-mux_off();
+
+function main(oAuth2Client) { //What to do after authentication
+  planEvents(oAuth2Client);
+  setInterval(planEvents, UPDATE_INTERVAL*60000, oAuth2Client);
+}
+
 // Load client secrets from a local file.
-fs.readFile(SECRET_PATH, (err, content) => {
+fs.readFile(SECRET_PATH, (err, clientSecret) => {
   if (err) {
     combinedLog('Error loading client secret file');
     return console.log('Error loading client secret file:', err);
   }
   // Authorize a client with credentials, then call the Google Calendar API.
-  authorize(JSON.parse(content),listEvents);
-  setInterval(() => {listEvents(oAuth2Client)}, UPDATE_INTERVAL*60000); //Reupdate, do we need to reauth?
+  authorize(JSON.parse(clientSecret), main);
 });
 
-const port = new SerialPort('/dev/serial0', {
-  baudRate: 115200
-})
-/**
- * Create an OAuth2 client with the given credentials, and then execute the
- * given callback function.
- */
+  // Authorize a client with credentials, then call the Google Calendar API
 function authorize(credentials, callback) {
+  //console.log('Client Secret:');
+  //console.log(credentials.installed);
   const {client_secret, client_id, redirect_uris} = credentials.installed;
-  oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-  // Check if we have previously stored a token.
+  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
   fs.readFile(TOKEN_PATH, (err, token) => {
     if (err) {
       combinedLog('Error loading OAuth Token');
       return console.log('Error loading OAuth Token:', err);
     }
-    oAuth2Client.setCredentials(JSON.parse(token));
+    let parsedToken = JSON.parse(token);
+    //console.log('Token:');
+    //console.log(parsedToken);
+    oAuth2Client.setCredentials(parsedToken);
     callback(oAuth2Client);
   });
 }
 
-function listEvents(auth) {
+const port = new SerialPort('/dev/serial0', {
+  baudRate: 115200
+})
+
+function planEvents(auth) {
+  console.log('Auth:');
+  console.log(auth);
   const calendar = google.calendar({version: 'v3', auth});
   const curHour = new Date; //Plan out the current hour
   curHour.setSeconds(curHour.getSeconds() + 10); //Give us a ten sec delay for causality
@@ -99,9 +110,10 @@ function listEvents(auth) {
   }, (err, res) => {
     if (err) {
       combinedLog('The API returned an error: ' + err);
+      return;
     }
     const events = res.data.items;
-    //combinedLog('Got ' + events.length + ' events!' );
+    combinedLog('Got ' + events.length + ' events!' );
     for (let event of events) {
       const eventStart = new Date(event.start.dateTime);
       const eventEnd = new Date(event.end.dateTime);

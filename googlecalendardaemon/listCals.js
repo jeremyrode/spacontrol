@@ -23,6 +23,8 @@ fs.readFile('/home/pi/client_secret.json', (err, content) => {
  * @param {function} callback The callback to call with the authorized client.
  */
 function authorize(credentials, callback) {
+  console.log('Client Secret:');
+  console.log(credentials.installed);
   const {client_secret, client_id, redirect_uris} = credentials.installed;
   const oAuth2Client = new google.auth.OAuth2(
       client_id, client_secret, redirect_uris[0]);
@@ -30,7 +32,10 @@ function authorize(credentials, callback) {
   // Check if we have previously stored a token.
   fs.readFile(TOKEN_PATH, (err, token) => {
     if (err) return getAccessToken(oAuth2Client, callback);
-    oAuth2Client.setCredentials(JSON.parse(token));
+    let parsedToken = JSON.parse(token);
+    console.log('Token:');
+    console.log(parsedToken);
+    oAuth2Client.setCredentials(parsedToken);
     callback(oAuth2Client);
   });
 }
@@ -67,12 +72,14 @@ function getAccessToken(oAuth2Client, callback) {
 }
 
 /**
- * Lists the next 10 events on the user's primary calendar.
+ * Lists the calen
  * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
  */
 function listCals(auth) {
+  console.log('Auth:');
+  console.log(auth);
   const calendar = google.calendar({version: 'v3', auth});
-  calendar.calendarList.list({maxResults: 50}, (err, res) => {
+  calendar.calendarList.list({maxResults: 1}, (err, res) => {
     if (err) return console.log('The API returned an error: ' + err);
     const cals = res.data.items;
     if (cals.length) {

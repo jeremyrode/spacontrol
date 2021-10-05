@@ -30,10 +30,10 @@ const VIR_PRESS_PAT_REPEAT = 5; //How many pattern repeats for each virtual pres
 const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
-var curPlanCommands = new Array(); //List of Intervals for the curent plan
+let curPlanCommands = new Array(); //List of Intervals for the curent plan
 
 // Log file for testing purposes
-var logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
+let logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
 
 //Make sure at startup we don't control the serial bus
 mux_off();
@@ -64,8 +64,6 @@ fs.readFile(SECRET_PATH, (err, clientSecret) => {
 
   // Authorize a client with credentials, then call the Google Calendar API
 function authorize(credentials, callback) {
-  //console.log('Client Secret:');
-  //console.log(credentials.installed);
   const {client_secret, client_id, redirect_uris} = credentials.installed;
   const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
   fs.readFile(TOKEN_PATH, (err, token) => {
@@ -74,8 +72,6 @@ function authorize(credentials, callback) {
       return console.log('Error loading OAuth Token:', err);
     }
     let parsedToken = JSON.parse(token);
-    //console.log('Token:');
-    //console.log(parsedToken);
     oAuth2Client.setCredentials(parsedToken);
     callback(oAuth2Client);
   });
@@ -85,19 +81,17 @@ const port = new SerialPort('/dev/serial0', {
   baudRate: 115200
 })
 
-function planEvents(auth) {
-  console.log('Auth:');
-  console.log(auth);
+function planEvents(auth) { //Plan out the current interval
   const calendar = google.calendar({version: 'v3', auth});
-  const curHour = new Date; //Plan out the current hour
+  const curHour = new Date;
   curHour.setSeconds(curHour.getSeconds() + 10); //Give us a ten sec delay for causality
   const nextHour = new Date(curHour.getTime()); //Clone current time
   nextHour.setMinutes(curHour.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
   //combinedLog('We are planning');
   //combinedLog('From: ' + curHour.toString());
   //combinedLog('To: ' +  nextHour.toString());
-  mux_off(); //On the small chance we interrupt a command
-  while (curPlanCommands.length) { //flush the current plan in
+  mux_off(); //On the small chance we interrupt an executing command
+  while (curPlanCommands.length) { //flush any remnants of the current plan
     clearTimeout(curPlanCommands.pop());
   }
   calendar.events.list({
@@ -117,8 +111,8 @@ function planEvents(auth) {
     for (let event of events) {
       const eventStart = new Date(event.start.dateTime);
       const eventEnd = new Date(event.end.dateTime);
-      var summary = event.summary.split(":"); //Look for desired temp
-      var desired_temp = parseInt(summary[1],10);
+      let summary = event.summary.split(":"); //Look for desired temp
+      let desired_temp = parseInt(summary[1],10);
       if (summary.length == 2 && summary[0].trim() == 'Temp' &&
       Number.isInteger(desired_temp) && desired_temp > 79 && desired_temp < 105) { //Validate Summary
          //combinedLog('Got Valid Temp of: ' + desired_temp);
@@ -167,16 +161,16 @@ function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual
       else {
         curPlanCommands.push(setTimeout(sendDown,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
       }
-    }
+    } //Cue up a bunch of idle commandes in between the button presses
     for (x = VIR_PRESS_PAT_REPEAT; x < VIR_PRESS_PAT_REPEAT*2; x++) {
       curPlanCommands.push(setTimeout(sendIdle,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
     }
   }
   curPlanCommands.push(setTimeout(mux_off,i*VIRTUAL_PRESS_DELAY+commandDelay)); //Give back control of the bus
   curPlanCommands.push(setTimeout(combinedLog,i*VIRTUAL_PRESS_DELAY+commandDelay,
-    'Finished Exec ' + numPress + ' presses ' + isUp)); // Log an event for testing
+    'Finished Exec ' + numPress + ' presses ' + isUp)); // Log an event for testing the timing
 }
-
+//Convience functions allowing for logging and avoid passing args with setTimeout
 function mux_on() {
   //combinedLog('MUX ON');
 	MUXPin.writeSync(1);

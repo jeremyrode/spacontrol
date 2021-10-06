@@ -12,14 +12,11 @@ process.title = 'GoogleCalendarDaemon';
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
-// The file token.json stores the user's access and refresh tokens, and is
-// created automatically when the authorization flow completes for the first
-// time.
 const TOKEN_PATH = '/home/pi/token.json';
 const SECRET_PATH = '/home/pi/client_secret.json';
 const LOG_FILE = '/home/pi/SpaCalendarLog.txt';
 const GOOGLE_CAL_ID = '86tvif05v2c7t148ctpojefc8k@group.calendar.google.com';
-const UPDATE_INTERVAL = 20; //How often to poll Goolge canlendar In mins
+const UPDATE_INTERVAL = 30; //How often to poll Goolge canlendar In mins
 const INTERVAL_OVERLAP = 1; //In mins to be sure we don't miss anything
 const IDLE_TEMP = 80; //What temp when no event is scheduled
 const LONG_PATTERN =  Buffer.alloc(10,'584D5300036b00000166','hex'); //No button pressed pattern
@@ -30,7 +27,7 @@ const VIR_PRESS_PAT_REPEAT = 5; //How many pattern repeats for each virtual pres
 const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
-let curPlanCommands = new Array(); //List of Intervals for the curent plan
+let pendingCommands = false; //Mutex for pending unexecuted commands
 
 // Log file for testing purposes
 let logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
@@ -48,8 +45,8 @@ function combinedLog(message) {
 }
 
 function main(oAuth2Client) { //What to do after authentication
-  planEvents(oAuth2Client);
-  setInterval(planEvents, UPDATE_INTERVAL*60000, oAuth2Client);
+  planEvents(oAuth2Client); //Do a plan now
+  setInterval(planEvents, UPDATE_INTERVAL*60000, oAuth2Client); //Replan
 }
 
 // Load client secrets from a local file.
@@ -87,12 +84,14 @@ function planEvents(auth) { //Plan out the current interval
   curHour.setSeconds(curHour.getSeconds() + 10); //Give us a ten sec delay for causality
   const nextHour = new Date(curHour.getTime()); //Clone current time
   nextHour.setMinutes(curHour.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
-  //combinedLog('We are planning');
-  //combinedLog('From: ' + curHour.toString());
-  //combinedLog('To: ' +  nextHour.toString());
-  mux_off(); //On the small chance we interrupt an executing command
-  while (curPlanCommands.length) { //flush any remnants of the current plan
-    clearTimeout(curPlanCommands.pop());
+  if (pendingCommands) { //We have unexed commands, this is unlikely
+    combinedLog('We had pending events at: ' + pendingCommands.toString());
+    let delay = Math.abs(pendingCommands - Date.now())+10;
+    if (delay < UPDATE_INTERVAL * 60000 ) { //if the normal update wont get it
+      setTimeout(planEvents,delay,auth); //Call ourself in the future
+      combinedLog('Recall planEvents() in ' + delay + ' ms');
+    }
+    return; // don't plan
   }
   calendar.events.list({
     calendarId: GOOGLE_CAL_ID,
@@ -135,42 +134,51 @@ function planEvents(auth) { //Plan out the current interval
 function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need to know what current temp setting is
   let msecsInFuture  = Math.abs(atTime - Date.now());
   if (temp >= 104) { //This is the limit, so just go there with extra presse
-    //combinedLog('Scheduling an up to 104 in ' + (msecsInFuture/60000).toFixed(1)  + ' minutes');
-    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,true,msecsInFuture); //Ensure we are at 104 by going up a bunch
+    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,true,msecsInFuture,true); //Ensure we are at 104 by going up a bunch
   }
   else {
-    //combinedLog('Scheduling a go down to 80 in ' + (msecsInFuture/60000).toFixed(1)  + ' minutes');
-    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture); //Ensure we are at 80 by going down a bunch
     if (temp > 80) { //If above 80, go there after a delay
-      //combinedLog('Scheduling ' + (temp-79).toFixed(1) + ' virtual presses in ' + ((msecsInFuture + DELAY_DOWN_TO_UP)/60000).toFixed(1)  + ' minutes');
-      tempCommand(temp-79,true,msecsInFuture + DELAY_DOWN_TO_UP); //Go up from 80 after delay, first press is lost
+      tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture,false); //Ensure we are at 80 by going down a bunch
+      tempCommand(temp-79,true,msecsInFuture + DELAY_DOWN_TO_UP,true); //Go up from 80 after delay, first press is lost
+    }
+    else {
+      tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture,true); //Ensure we are at 80 by going down a bunch
     }
   }
 }
 
-function tempCommand(numPress,isUp,commandDelay) { //Schedule a series of vitual button presses
-  let i = 1; // Push all the timeout events, so we can ensure they're cancelled
-  let x = 0; // when we plan the next interval
-  curPlanCommands.push(setTimeout(mux_on,commandDelay)); // Take control of the serial bus
+function tempCommand(numPress,isUp,commandDelay,endEvent) { //Schedule a series of vitual button presses
+  let i = 1; //Virtual button presses Counter
+  let x = 0; //Button press pattern repeat counter
+  setTimeout(mux_on,commandDelay); // Take control of the serial bus
   //Cue up a bunch of virtual button presses between idle commands
   for (i = 1; i < numPress*VIR_PRESS_PAT_REPEAT*2; i+=VIR_PRESS_PAT_REPEAT*2) {
     for (x = 0; x < VIR_PRESS_PAT_REPEAT; x++) {
       if (isUp) {
-        curPlanCommands.push(setTimeout(sendUp,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
+        setTimeout(sendUp,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay);
       }
       else {
-        curPlanCommands.push(setTimeout(sendDown,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
+        setTimeout(sendDown,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay);
       }
-    } //Cue up a bunch of idle commandes in between the button presses
+    } //Cue up a bunch of idle commands in between the button presses
     for (x = VIR_PRESS_PAT_REPEAT; x < VIR_PRESS_PAT_REPEAT*2; x++) {
-      curPlanCommands.push(setTimeout(sendIdle,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay));
+      setTimeout(sendIdle,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay);
     }
   }
-  curPlanCommands.push(setTimeout(mux_off,i*VIRTUAL_PRESS_DELAY+commandDelay)); //Give back control of the bus
-  curPlanCommands.push(setTimeout(combinedLog,i*VIRTUAL_PRESS_DELAY+commandDelay,
-    'Finished Exec ' + numPress + ' presses ' + isUp)); // Log an event for testing the timing
+  let endMs = i*VIRTUAL_PRESS_DELAY+commandDelay;
+  setTimeout(mux_off,endMs); //Give back control of the bus
+  if (endEvent) { //if this is the final command, set the mutex and a delay to clear it
+    pendingCommands = new Date(Date.now() + endMs + 1);
+    setTimeout(clear_commands,endMs + 1); //clear the mutex when done
+  }
+  //Below is to generate a log event after the event finishes
+  setTimeout(combinedLog,endMs,'Finished Exec ' + numPress + ' presses ' + isUp);
 }
 //Convience functions allowing for logging and avoid passing args with setTimeout
+function clear_commands() {
+  pendingCommands = false;
+}
+
 function mux_on() {
   //combinedLog('MUX ON');
 	MUXPin.writeSync(1);

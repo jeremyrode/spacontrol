@@ -5,6 +5,9 @@ IoT Work for my Caldera Vacanza Hot Tub
 I have a Caldera Vacanza Hot Tub in my house and I love it, with one exception: it heats on demand.  With electric time of use (TOU) rates, I can save money if the hot tub would heat during off-peak rates.  Goal is to reverse engineer the protocol used to signal button presses.  Phase 1 is to have a cron script adjust the setpoints so that the heating occurs during off-peak hours.  Phase 2 is to reverse engineer the status screen protocol, and forward the status to a website.
 
 ## Status
+
+Current work is pulling temp events from a Google Calendar via the API, then schedule them.  See [googlecalendardaemon](/googlecalendardaemon)
+
 Temp up/down works.  I have a cron job running tools/temp_up.js and tools/temp_down.js at the appropriate times for cheap TOU power.
 
 Add the following to the crontab:
@@ -14,8 +17,6 @@ Add the following to the crontab:
 50 5 * * * /home/pi/spacontrol/tools/temp_down.js
 ```
 Here at 12:08 AM the temp is turned down to ensure a start from 80 deg, as this code is "open-loop".  At 12:10 AM the temp is turned up to 103, then at 5:50AM the temp is turned back down to 80 deg.  Ideally the spa will be at ~100 deg in the evening when I'm ready to go in.
-
-Current plan is to pull temp events from a Google Calendar via the API, then schedule them.  See [googlecalendardaemon](/googlecalendardaemon)
 
 ## Detailed Status
 I have successfully reverse engineered the button press protocol.  Playing the protocol back proved to be tricky, as the keypad seems to be polled, so even when no buttons are pressed, the keypad reports status every ~40ms.  Injecting commands on top of the polled screen traffic does not result in the controller registering a button press. I suspect there is a switch "debouncing" algorithm that only registers a press if button polls several times in a row.  This necessitated a more complicated hardware design, where a GPIO on the raspberry pi is used to switch a mux, muting the traffic from the screen while virtual button presses are generated.

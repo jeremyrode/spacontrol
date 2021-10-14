@@ -8,7 +8,8 @@ Debugging is going to take a while, as the issue takes days to manifest.  I clea
 
 Turns out this is not a code problem, it is because my refresh token from Google was issued under a testing app.  From the Google documentation:
 ```
-A Google Cloud Platform project with an OAuth consent screen configured for an external user type and a publishing status of "Testing" is issued a refresh token expiring in 7 days.
+A Google Cloud Platform project with an OAuth consent screen configured for an external user type and a publishing
+status of "Testing" is issued a refresh token expiring in 7 days.
 ```
 I have switched my app to "In production".  I don't plan on verifying the App.  It is unclear what the refresh token expiry will be for an in production app that is unverified.  Currently regenerated the refresh token, and will see if it expires.  I will probably abandon the Google API route if I need to reauthorize the app every 7 days.
 

@@ -13,19 +13,19 @@ ser = serial.Serial(
     )
 
 len = 100
-blank_run = 0
+num_collects_end = 1000
+num_collects = 0
 
-while True:
+values = {}
+
+while (num_collects < num_collects_end):
     data=ser.read(len)
     if (data): #Don't print empty lines
-        if (blank_run):
-            print('Run of ' + "{0:5d}".format(blank_run) + ' blanks')
-            blank_run = 0
-        bin_string = data.hex()
-        print(bin_string)
-    else:
-        blank_run += 1
-    #    old = data
+        data_hex = data.hex()
+        if data_hex in values:
+            values[data_hex] += 1
+        else:
+            values[data_hex] = 1
+        num_collects += 1
 
-
-#if (data != old):
+print(values)

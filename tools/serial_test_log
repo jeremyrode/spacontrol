@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+import datetime
+import serial
+import time
+
+ser = serial.Serial(
+    port='/dev/ttyAMA0',
+    baudrate = 115200,
+#    timeout=0.5  #Attempting to time gate the pattern
+#   parity=serial.PARITY_NONE,
+#   stopbits=serial.STOPBITS_TWO,#35B (minus 6 bits) with two stop bits
+#   bytesize=serial.EIGHTBITS,  # 38 bytes with one stop bit
+
+    )
+
+f = open("/home/pi/spaseriallog.txt", "a")
+
+len = 10
+
+while True:
+    data=ser.read(len)
+    f.write(data.hex() + "\n")
+    time.sleep(10)

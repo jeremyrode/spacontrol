@@ -1,7 +1,6 @@
 #!/usr/bin/node
 'use strict';
 const fs = require('fs');
-const readline = require('readline');
 const {google} = require('googleapis');
 const SerialPort = require('serialport');
 const Delimiter = require('@serialport/parser-delimiter');
@@ -31,6 +30,8 @@ let pendingCommands = null; //Mutex for pending unexecuted commands
 
 // Log file for testing purposes
 let logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
+// Serial Port to send commands
+const port = new SerialPort('/dev/serial0', {  baudRate: 115200 });
 
 //Make sure at startup we don't control the serial bus
 mux_off();
@@ -75,16 +76,12 @@ function authorize(credentials, callback) {
   });
 }
 
-const port = new SerialPort('/dev/serial0', {
-  baudRate: 115200
-})
-
 function planEvents(auth) { //Plan out the current interval
   const calendar = google.calendar({version: 'v3', auth});
-  const curHour = new Date;
-  curHour.setSeconds(curHour.getSeconds() + 10); //Give us a ten sec delay for causality
-  const nextHour = new Date(curHour.getTime()); //Clone current time
-  nextHour.setMinutes(curHour.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
+  const planStartDate = new Date;
+  planStartDate.setSeconds(planStartDate.getSeconds() + 10); //Give us a ten sec delay for causality
+  const planEndDate = new Date(planStartDate.getTime()); //Clone current time
+  planEndDate.setMinutes(planStartDate.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
   if (pendingCommands) { //We have unexed commands, this is unlikely
     combinedLog('We had pending events at: ' + pendingCommands.toString());
     let delay = Math.abs(pendingCommands - Date.now())+10;
@@ -96,8 +93,8 @@ function planEvents(auth) { //Plan out the current interval
   }
   calendar.events.list({
     calendarId: GOOGLE_CAL_ID,
-    timeMin: curHour.toISOString(),
-    timeMax: nextHour.toISOString(),
+    timeMin: planStartDate.toISOString(),
+    timeMax: planEndDate.toISOString(),
     maxResults: 10,
     singleEvents: true,
     orderBy: 'startTime',
@@ -116,11 +113,11 @@ function planEvents(auth) { //Plan out the current interval
       if (summary.length == 2 && summary[0].trim() == 'Temp' &&
       Number.isInteger(desired_temp) && desired_temp > 79 && desired_temp < 105) { //Validate Summary
          //combinedLog('Got Valid Temp of: ' + desired_temp);
-         if ( eventStart >= curHour ) { //If the event starts after interval start, need a temp up event
+         if ( eventStart >= planStartDate ) { //If the event starts after interval start, need a temp up event
            //combinedLog('Temp Up to ' + desired_temp + ' Event Found at start: ' + eventStart.toString());
            scheduleTemp(desired_temp, eventStart); //Schedule the temp change
          }
-         if ( eventEnd <= nextHour ) { //If the event ends before the interval end, need a temp down event
+         if ( eventEnd <= planEndDate ) { //If the event ends before the interval end, need a temp down event
            //combinedLog('Temp Down Event Found at end: ' + eventEnd.toString());
            scheduleTemp(IDLE_TEMP, eventEnd); //Schedule the temp change
          }

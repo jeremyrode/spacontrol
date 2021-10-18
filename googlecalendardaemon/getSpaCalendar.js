@@ -1,5 +1,5 @@
 #!/usr/bin/node
-
+'use strict';
 const fs = require('fs');
 const readline = require('readline');
 const {google} = require('googleapis');
@@ -27,7 +27,7 @@ const VIR_PRESS_PAT_REPEAT = 5; //How many pattern repeats for each virtual pres
 const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
-let pendingCommands = false; //Mutex for pending unexecuted commands
+let pendingCommands = null; //Mutex for pending unexecuted commands
 
 // Log file for testing purposes
 let logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
@@ -47,6 +47,7 @@ function combinedLog(message) {
 function main(oAuth2Client) { //What to do after authentication
   planEvents(oAuth2Client); //Do a plan now
   setInterval(planEvents, UPDATE_INTERVAL*60000, oAuth2Client); //Replan
+  combinedLog('New Session');
 }
 
 // Load client secrets from a local file.
@@ -102,11 +103,11 @@ function planEvents(auth) { //Plan out the current interval
     orderBy: 'startTime',
   }, (err, res) => {
     if (err) {
-      combinedLog('The API returned an error: ' + err);
+      combinedLog('The Google API request returned an error: ' + err);
       return;
     }
     const events = res.data.items;
-    combinedLog('Got ' + events.length + ' events!' );
+    //combinedLog('Got ' + events.length + ' events!' );
     for (let event of events) {
       const eventStart = new Date(event.start.dateTime);
       const eventEnd = new Date(event.end.dateTime);
@@ -168,15 +169,15 @@ function tempCommand(numPress,isUp,commandDelay,endEvent) { //Schedule a series 
   let endMs = i*VIRTUAL_PRESS_DELAY+commandDelay;
   setTimeout(mux_off,endMs); //Give back control of the bus
   if (endEvent) { //if this is the final command, set the mutex and a delay to clear it
-    pendingCommands = new Date(Date.now() + endMs + 1);
-    setTimeout(clear_commands,endMs + 1); //clear the mutex when done
+    pendingCommands = new Date(Date.now() + endMs);
+    setTimeout(clear_commands,endMs); //clear the mutex when commands are done
   }
   //Below is to generate a log event after the event finishes
   setTimeout(combinedLog,endMs,'Finished Exec ' + numPress + ' presses ' + isUp);
 }
 //Convience functions allowing for logging and avoid passing args with setTimeout
 function clear_commands() {
-  pendingCommands = false;
+  pendingCommands = null;
 }
 
 function mux_on() {

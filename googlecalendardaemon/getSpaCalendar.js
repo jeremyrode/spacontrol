@@ -27,6 +27,7 @@ const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
 
 let pendingCommands = null; //Mutex for pending unexecuted commands
+let errorsInAPI = 0; //Counter to limit requests to Google
 
 // Log file for testing purposes
 let logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
@@ -101,7 +102,13 @@ function planEvents(auth) { //Plan out the current interval
   }, (err, res) => {
     if (err) {
       combinedLog('The Google API request returned an error: ' + err);
-      return;
+      errorsInAPI += 1;
+      combinedLog('We have ' + errorsInAPI + ' total errors');
+      if (errorsInAPI < 100) { //For now limit us to 100 extra requests
+        setTimeout(planEvents,60000,auth); //Call ourself one min in the future
+        combinedLog('Recall planEvents() in one min');
+      }
+      return; //don't plan
     }
     const events = res.data.items;
     //combinedLog('Got ' + events.length + ' events!' );

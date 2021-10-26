@@ -83,7 +83,7 @@ function planEvents(auth) { //Plan out the current interval
   planStartDate.setSeconds(planStartDate.getSeconds() + 10); //Give us a ten sec delay for causality
   const planEndDate = new Date(planStartDate.getTime()); //Clone current time
   planEndDate.setMinutes(planStartDate.getMinutes() + UPDATE_INTERVAL + INTERVAL_OVERLAP); // Next interval
-  if (pendingCommands) { //We have unexed commands, this is unlikely
+  if (pendingCommands) { //We have unexed commands, this happens
     combinedLog('We had pending events at: ' + pendingCommands.toString());
     let delay = Math.abs(pendingCommands - Date.now())+10;
     if (delay < UPDATE_INTERVAL * 60000 ) { //if the normal update wont get it
@@ -103,13 +103,14 @@ function planEvents(auth) { //Plan out the current interval
     if (err) {
       combinedLog('The Google API request returned an error: ' + err);
       errorsInAPI += 1;
-      combinedLog('We have ' + errorsInAPI + ' total errors');
-      if (errorsInAPI < 100) { //For now limit us to 100 extra requests
+      combinedLog('We have ' + errorsInAPI + ' running errors');
+      if (errorsInAPI < 10) { //For now limit us to 10 extra requests
         setTimeout(planEvents,60000,auth); //Call ourself one min in the future
         combinedLog('Recall planEvents() in one min');
       }
       return; //don't plan
     }
+    errorsInAPI = 0; //Reset error counter
     const events = res.data.items;
     //combinedLog('Got ' + events.length + ' events!' );
     for (let event of events) {

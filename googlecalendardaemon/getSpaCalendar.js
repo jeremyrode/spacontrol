@@ -146,7 +146,8 @@ function planEvents(auth) { //Plan out the current interval
 function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need to know what current temp setting is
   let msecsInFuture  = Math.abs(atTime - Date.now());
   if (temp >= 104) { //This is the limit, so just go there with extra presse
-    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,true,msecsInFuture,true); //Ensure we are at 104 by going up a bunch
+    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,true,msecsInFuture,false); //Ensure we are at 104 by going up a bunch
+    tempCommand(NUM_VIRT_PRESS_TO_LIMIT,true,msecsInFuture + DELAY_DOWN_TO_UP,true); //Double ensure
   }
   else {
     if (temp > 80) { //If above 80, go there after a delay
@@ -154,7 +155,8 @@ function scheduleTemp (temp,atTime) { //Set Temp from a limit, so we don't need 
       tempCommand(temp-79,true,msecsInFuture + DELAY_DOWN_TO_UP,true); //Go up from 80 after delay, first press is lost
     }
     else {
-      tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture,true); //Ensure we are at 80 by going down a bunch
+      tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture,false); //Ensure we are at 80 by going down a bunch
+      tempCommand(NUM_VIRT_PRESS_TO_LIMIT,false,msecsInFuture + DELAY_DOWN_TO_UP,true); //Double Ensure
     }
   }
 }
@@ -165,7 +167,7 @@ function tempCommand(numPress,isUp,commandDelay,endEvent) { //Schedule a series 
   setTimeout(mux_on,commandDelay); // Take control of the serial bus
   //Cue up a bunch of virtual button presses between idle commands
   for (i = 1; i < numPress*VIR_PRESS_PAT_REPEAT*2; i+=VIR_PRESS_PAT_REPEAT*2) {
-    for (x = 0; x < VIR_PRESS_PAT_REPEAT; x++) {
+    for (x = 0; x < VIR_PRESS_PAT_REPEAT; x++) { //Each
       if (isUp) {
         setTimeout(sendUp,(i+x)*VIRTUAL_PRESS_DELAY+commandDelay);
       }

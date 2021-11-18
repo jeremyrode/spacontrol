@@ -37,6 +37,12 @@ const port = new SerialPort('/dev/serial0', {  baudRate: 115200 });
 //Make sure at startup we don't control the serial bus
 mux_off();
 
+process.on('SIGINT', _ => { //If interrupted, turn mux off
+  MUXPin.writeSync(0);
+  process.exit();
+});
+
+
 // logging function
 function combinedLog(message) {
   let curDate = new Date();

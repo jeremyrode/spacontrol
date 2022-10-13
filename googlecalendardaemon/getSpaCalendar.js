@@ -10,11 +10,9 @@ const MUXPin = new Gpio(5, 'out'); //declare GPIO5, the muxpin as an output
 process.title = 'GoogleCalendarDaemon';
 
 // If modifying these scopes, delete token.json.
-const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
-const TOKEN_PATH = '/home/pi/token.json';
-const SECRET_PATH = '/home/pi/client_secret.json';
+const SCOPES = ['https://www.googleapis.com/auth/calendar.events.public.readonly'];
+const API_KEY_PATH = '/home/pi/google_api_key.json';
 const LOG_FILE = '/home/pi/SpaCalendarLog.txt';
-const GOOGLE_CAL_ID = '86tvif05v2c7t148ctpojefc8k@group.calendar.google.com';
 const UPDATE_INTERVAL = 30; //How often to poll Goolge canlendar In mins
 const INTERVAL_OVERLAP = 1; //In mins to be sure we don't miss anything
 const IDLE_TEMP = 80; //What temp when no event is scheduled
@@ -25,23 +23,22 @@ const VIRTUAL_PRESS_DELAY = 40; //delay in ms between vitual button presses
 const VIR_PRESS_PAT_REPEAT = 5; //How many pattern repeats for each virtual press 10 is too many, registers mutiple sometimes
 const NUM_VIRT_PRESS_TO_LIMIT = 26; //How many virtual presses to hit a limit
 const DELAY_DOWN_TO_UP = 60000; //How long to wait between the two temp changes
-
+//Globals
 let pendingCommands = null; //Mutex for pending unexecuted commands
 let errorsInAPI = 0; //Counter to limit requests to Google
 
 // Log file for testing purposes
-let logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
+const logfile = fs.createWriteStream(LOG_FILE, {flags:'a'});
 // Serial Port to send commands
 const port = new SerialPort('/dev/serial0', {  baudRate: 115200 });
 
 //Make sure at startup we don't control the serial bus
 mux_off();
-
-process.on('SIGINT', _ => { //If interrupted, turn mux off
+//If interrupted, turn mux off
+process.on('SIGINT', _ => {
   MUXPin.writeSync(0);
   process.exit();
 });
-
 
 // logging function
 function combinedLog(message) {
@@ -52,39 +49,19 @@ function combinedLog(message) {
   logfile.write(message + '\n')
 }
 
-function main(oAuth2Client) { //What to do after authentication
-  planEvents(oAuth2Client); //Do a plan now
-  setInterval(planEvents, UPDATE_INTERVAL*60000, oAuth2Client); //Replan
-  combinedLog('New Session');
-}
-
-// Load client secrets from a local file.
-fs.readFile(SECRET_PATH, (err, clientSecret) => {
-  if (err) {
-    combinedLog('Error loading client secret file');
-    return console.log('Error loading client secret file:', err);
-  }
+// Load API Key from a local file.
+fs.readFile(API_KEY_PATH, (err, content) => {
+  if (err) return combinedLog('Error loading API key file:', err);
   // Authorize a client with credentials, then call the Google Calendar API.
-  authorize(JSON.parse(clientSecret), main);
+  const obj = JSON.parse(content);
+  planEvents(obj.api_key, obj.google_cal_id); //Do a plan now
+  setInterval(planEvents, UPDATE_INTERVAL*60000, obj.api_key,obj.google_cal_id); //Replan
+  combinedLog('New Session');
 });
 
-  // Authorize a client with credentials, then call the Google Calendar API
-function authorize(credentials, callback) {
-  const {client_secret, client_id, redirect_uris} = credentials.installed;
-  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-  fs.readFile(TOKEN_PATH, (err, token) => {
-    if (err) {
-      combinedLog('Error loading OAuth Token');
-      return console.log('Error loading OAuth Token:', err);
-    }
-    let parsedToken = JSON.parse(token);
-    oAuth2Client.setCredentials(parsedToken);
-    callback(oAuth2Client);
-  });
-}
 
-function planEvents(auth) { //Plan out the current interval
-  const calendar = google.calendar({version: 'v3', auth});
+function planEvents(api_key, google_cal_id) { //Plan out the current interval
+  const calendar = google.calendar({version: 'v3', auth: api_key});
   const planStartDate = new Date;
   planStartDate.setSeconds(planStartDate.getSeconds() + 10); //Give us a ten sec delay for causality
   const planEndDate = new Date(planStartDate.getTime()); //Clone current time
@@ -93,13 +70,13 @@ function planEvents(auth) { //Plan out the current interval
     combinedLog('We had pending events at: ' + pendingCommands.toString());
     let delay = Math.abs(pendingCommands - Date.now())+10;
     if (delay < UPDATE_INTERVAL * 60000 ) { //if the normal update wont get it
-      setTimeout(planEvents,delay,auth); //Call ourself in the future
+      setTimeout(planEvents,delay, api_key, google_cal_id); //Call ourself in the future
       combinedLog('Recall planEvents() in ' + delay + ' ms');
     }
     return; // don't plan
   }
   calendar.events.list({
-    calendarId: GOOGLE_CAL_ID,
+    calendarId: google_cal_id,
     timeMin: planStartDate.toISOString(),
     timeMax: planEndDate.toISOString(),
     maxResults: 10,
@@ -111,7 +88,7 @@ function planEvents(auth) { //Plan out the current interval
       errorsInAPI += 1;
       combinedLog('We have ' + errorsInAPI + ' running errors');
       if (errorsInAPI < 10) { //For now limit us to 10 extra requests
-        setTimeout(planEvents,60000,auth); //Call ourself one min in the future
+        setTimeout(planEvents,60000,api_key,google_cal_id); //Call ourself one min in the future
         combinedLog('Recall planEvents() in one min');
       }
       return; //don't plan

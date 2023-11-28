@@ -2,13 +2,15 @@
 IoT Work for my Caldera Vacanza Hot Tub
 
 ## General Info
-I have a Caldera Vacanza Hot Tub in my house and I love it, with one exception: it heats on demand.  With electric time of use (TOU) rates, I can save money if the hot tub would heat during off-peak rates.  Goal is to reverse engineer the protocol used to signal button presses.  Phase 1 is to have a cron script adjust the setpoints so that the heating occurs during off-peak hours.  Phase 2 is to reverse engineer the status screen protocol, and forward the status to a website.
+I have a Caldera Vacanza Hot Tub in my house and I love it, with one exception: it heats on demand.  With electric time of use (TOU) rates, I can save money if the hot tub would heat during off-peak rates.  Goal is to reverse engineer the protocol used to signal button presses.  Phase 1 is to have a cron script adjust the setpoints so that the heating occurs during off-peak hours.  Phase 2 (current) is to use Google Calendar to schedule the virtual button presses to follow the complex TOU schedule.  Phase 3 (In progress) is to reverse engineer the status screen protocol, and forward the status to a website.  This has been stymied by the complex bit banging that is going on between these systems.  The patterns seem to change, see Keypad Commands section.
 
 ## Status
 
-Current work is pulling temp events from a Google Calendar via the API, then schedule them.  See [googlecalendardaemon](/googlecalendardaemon)
+Phase 2 is working well for a year now, it pulls the desired temprature from a [Google Calendar via the API](/googlecalendardaemon), then schedules them.  I thought this was clever, so [I broke out this code as an example](https://github.com/jeremyrode/CalendarScraper) and it made [HACAKADAY!](https://hackaday.com/2022/10/25/using-google-calendar-for-machines-to-keep-track-of-human-days/)
 
-Temp up/down works.  I have a cron job running tools/temp_up.js and tools/temp_down.js at the appropriate times for cheap TOU power.
+## Quickstart
+
+Easiest way is to have a cron job running tools/temp_up.js and tools/temp_down.js at the appropriate times for cheap TOU power.
 
 Add the following to the crontab:
 ```
@@ -21,9 +23,8 @@ Here at 12:08 AM the temp is turned down to ensure a start from 80 deg, as this 
 ## Detailed Status
 I have successfully reverse engineered the button press protocol.  Playing the protocol back proved to be tricky, as the keypad seems to be polled, so even when no buttons are pressed, the keypad reports status every ~40ms.  Injecting commands on top of the polled screen traffic does not result in the controller registering a button press. I suspect there is a switch "debouncing" algorithm that only registers a press if button polls several times in a row.  This necessitated a more complicated hardware design, where a GPIO on the raspberry pi is used to switch a mux, muting the traffic from the screen while virtual button presses are generated.
 
-More details on the reverse engineering methods used, check back.
 
-## Screen status
+## Screen status 
 77 degrees
 Mostly
 4a962bf252fefefa6600
